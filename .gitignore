@@ -3,7 +3,4 @@ __pycache__
 .env
 
 # generated / runtime artifacts (match in any directory)
-snapshot.jpg
-depth.png
-generated.png
 *.tmp

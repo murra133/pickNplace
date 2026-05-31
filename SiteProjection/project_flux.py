@@ -95,9 +95,12 @@ AZURE_MODEL    = "FLUX.2-flex"   # logged in output only; the URL already names 
 # Only the STYLE half of the instruction; the registration/fidelity rules live in
 # depth_flux's wrapper. Each raised box becomes a home; its raised top is the roof.
 PROMPT = (
-    "Render each raised box as a realistic small home/building sitting on its grid "
-    "plot, with the raised top as the roof. Keep it photorealistic and faithful, "
-    "matching the existing footprint and position exactly."
+    "The white blocks are the ONLY buildings: render each white block as a "
+    "realistic building on its exact footprint, with the raised top as the roof. "
+    "Everywhere there is NO white block, render landscaping as the background -- "
+    "grass, trees, greenery, parks, and walking paths. Everything that is not a "
+    "white block is landscaped background. Photorealistic and faithful, same "
+    "footprints, positions, and viewpoint."
 )
 
 # Output aspect ratio for the projector.
@@ -123,19 +126,44 @@ _SSL_CTX = ssl._create_unverified_context()
 DARKEN_GAIN  = 0.75
 DARKEN_GAMMA = 1.2
 
+# The wrist camera is mounted upside-down relative to the scene -- rotate frames.
+ROTATE_180 = True
 
-def _darken(jpg_bytes: bytes) -> bytes:
-    """Darken a JPEG via gain + gamma using a per-channel LUT. Returns JPEG bytes."""
-    if DARKEN_GAIN == 1.0 and DARKEN_GAMMA == 1.0:
+# Grid region (fixed "safe state"). Everything OUTSIDE this quad is blacked out.
+# Normalized [0..1] corners of the grid in the FINAL (post-rotation) frame, in
+# order TL, TR, BR, BL. Set to None to disable masking.
+GRID_QUAD = [(0.329, 0.050), (0.807, 0.050), (0.803, 0.861), (0.333, 0.861)]
+
+
+def _mask_outside_grid(img):
+    """Black out everything outside GRID_QUAD. img: PIL RGB image -> PIL RGB image."""
+    if not GRID_QUAD:
+        return img
+    from PIL import Image, ImageDraw
+    w, h = img.size
+    pts = [(int(x * w), int(y * h)) for (x, y) in GRID_QUAD]
+    mask = Image.new("L", img.size, 0)
+    ImageDraw.Draw(mask).polygon(pts, fill=255)
+    return Image.composite(img, Image.new("RGB", img.size, (0, 0, 0)), mask)
+
+
+def _process_frame(jpg_bytes: bytes) -> bytes:
+    """Rotate 180 + darken + grid-mask in one PIL pass. Returns JPEG bytes."""
+    no_darken = (DARKEN_GAIN == 1.0 and DARKEN_GAMMA == 1.0)
+    if no_darken and not ROTATE_180 and not GRID_QUAD:
         return jpg_bytes
     from PIL import Image
     img = Image.open(io.BytesIO(jpg_bytes)).convert("RGB")
-    lut = []
-    for i in range(256):
-        v = DARKEN_GAIN * (i / 255.0)
-        v = max(0.0, min(1.0, v)) ** DARKEN_GAMMA
-        lut.append(int(round(v * 255)))
-    img = img.point(lut * 3)
+    if ROTATE_180:
+        img = img.rotate(180)
+    if not no_darken:
+        lut = []
+        for i in range(256):
+            v = DARKEN_GAIN * (i / 255.0)
+            v = max(0.0, min(1.0, v)) ** DARKEN_GAMMA
+            lut.append(int(round(v * 255)))
+        img = img.point(lut * 3)
+    img = _mask_outside_grid(img)
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=90)
     return buf.getvalue()
@@ -215,7 +243,7 @@ def _capture_frame_rgb() -> bytes:
 def capture_wrist_frame() -> bytes:
     """Capture one wrist-cam JPEG (per CAPTURE_METHOD), darkened. Returns JPEG bytes."""
     raw = _capture_frame_rgb() if CAPTURE_METHOD == "frame" else _capture_stream()
-    return _darken(raw)
+    return _process_frame(raw)
 
 
 def set_camera_settings(**settings) -> tuple:
@@ -366,6 +394,14 @@ def show_fullscreen(png_bytes: bytes):
     import AppKit
     from Foundation import NSData
 
+    # Black out everything outside the grid on the projected output too.
+    if GRID_QUAD:
+        from PIL import Image
+        out = _mask_outside_grid(Image.open(io.BytesIO(png_bytes)).convert("RGB"))
+        b = io.BytesIO()
+        out.save(b, format="PNG")
+        png_bytes = b.getvalue()
+
     img_data = NSData.dataWithBytes_length_(png_bytes, len(png_bytes))
     ns_image = AppKit.NSImage.alloc().initWithData_(img_data)
     if ns_image is None:
@@ -424,6 +460,29 @@ def pump_cocoa_events(seconds: float):
         )
         if ev is not None:
             _ns["app"].sendEvent_(ev)
+
+
+def close_display():
+    """Close the projector window and clear state (used on shutdown)."""
+    win = _ns.get("window")
+    if win is not None:
+        win.orderOut_(None)
+        win.close()
+    _ns["app"] = _ns["window"] = _ns["view"] = None
+    # Pump a few events so the window actually disappears before we exit.
+    try:
+        import AppKit
+        from Foundation import NSDate
+        app = AppKit.NSApplication.sharedApplication()
+        for _ in range(5):
+            ev = app.nextEventMatchingMask_untilDate_inMode_dequeue_(
+                AppKit.NSEventMaskAny,
+                NSDate.dateWithTimeIntervalSinceNow_(0.01),
+                AppKit.NSDefaultRunLoopMode, True)
+            if ev is not None:
+                app.sendEvent_(ev)
+    except Exception:
+        pass
 
 
 def interactive_loop(regenerate):
