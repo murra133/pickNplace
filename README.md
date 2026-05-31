@@ -1,6 +1,6 @@
 # Mason
 
-![Mason render](SiteProjection/generated.png)
+![Mason render](Assets/Mason.png)
 
 
 Tabletop site-making: a robot arm lays out physical blocks, computer vision reads their footprints, and generative AI projects a photorealistic landscaped site back down onto the table.
@@ -59,6 +59,16 @@ The photo + depth map go to **Azure FLUX.2-flex** or **gpt-image-2** with a stri
 ### 5. Projection back onto the table
 
 A native Cocoa `NSWindow` displays the result fullscreen on the projector – aspect-preserved, grid-masked, above the menu bar – registered on top of the real blocks. Move a block and press `f`: `project_flux.py` re-captures and re-renders. The bare grid becomes a living site.
+
+---
+
+## Architecture
+
+The system runs as two coordinated pipelines – a robot/control architecture that lays out the physical blocks, and a vision/generation architecture that turns the scene into a projected site.
+
+![Architecture 1](Assets/Architecture%201.png)
+
+![Architecture 2](Assets/Architecture%202.png)
 
 ---
 
@@ -210,23 +220,4 @@ python3.11 SiteProjection/depth_flux.py
 
 ## Team
 
-<!-- Swap in real headshots under docs/team/ and update names/affiliations. -->
-<table>
-  <tr>
-    <td align="center">
-      <img src="docs/team/brian-murray.png" width="140" alt="Brian Murray"/><br/>
-      <b>Brian Murray</b><br/>
-      Hathaway Dinwiddie
-    </td>
-    <td align="center">
-      <img src="docs/team/teammate-2.png" width="140" alt="Teammate"/><br/>
-      <b>Teammate</b><br/>
-      Affiliation
-    </td>
-    <td align="center">
-      <img src="docs/team/teammate-3.png" width="140" alt="Teammate"/><br/>
-      <b>Teammate</b><br/>
-      Affiliation
-    </td>
-  </tr>
-</table>
+![Team](Assets/team_chart.png)
