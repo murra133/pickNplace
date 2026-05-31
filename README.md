@@ -68,7 +68,7 @@ The system runs as two coordinated pipelines – a robot/control architecture th
 
 ![Architecture 1](Assets/Architecture%201.png)
 
-![Architecture 2](Assets/Architecture%202.png)
+![Architecture 2](Assets/Site%20Map%20Overlay.png)
 
 ---
 
